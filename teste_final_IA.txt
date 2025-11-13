@@ -1,9 +1,9 @@
 /*
- * CÓDIGO FINAL - DESAFIO EXTRA (Firebase + Pinos do Amigo)
+ * CÓDIGO FINAL - DESAFIO EXTRA (Lógica Gradativa de 4 Zonas)
  * Hardware: ESP32, Sensor HC-SR04, Buzzer
- * Ação: Loga dados no Firebase com resposta gradativa do buzzer
+ * Ação: Loga dados no Firebase com resposta gradativa do buzzer.
  *
- * PINAGEM ATUALIZADA (do seu amigo):
+ * PINAGEM (conforme seu último código):
  * - Sensor Trig: D2
  * - Sensor Echo: D4
  * - Buzzer (+):  D26
@@ -79,32 +79,60 @@ void loop() {
   Serial.print(distance);
   Serial.println(" cm");
 
-  // --- 4. LÓGICA R.C.A. (FOCO NO BUZZER GRADATIVO) ---
-  // Baseado na tabela "Regras Condição-Ação" do PDF
+  // --- 4. LÓGICA R.C.A. GRADATIVA (O que você pediu) ---
+  // Baseado na tabela "Regras Condição-Ação" do PDF 
   
   if (distance > 50) {
-    // Zona Segura
+    // Zona Segura 
     acaoDisparada = "BUZZER_OFF_SEGURO";
-    digitalWrite(buzzerPin, LOW); // Buzzer Desligado
+    digitalWrite(buzzerPin, LOW); // Buzzer Desligado 
     
   } else if (distance > 20 && distance <= 50) {
-    // Zona de Atenção
+    // Zona de Atenção 
     acaoDisparada = "BUZZER_OFF_ATENCAO";
-    digitalWrite(buzzerPin, LOW); // Buzzer Desligado
+    digitalWrite(buzzerPin, LOW); // Buzzer Desligado 
     
   } else if (distance > 10 && distance <= 20) {
-    // Zona de Alerta
+    // Zona de Alerta 
     acaoDisparada = "BUZZER_PULSANTE_LENTO";
-    digitalWrite(buzzerPin, HIGH); // Buzzer Pulsando
+    digitalWrite(buzzerPin, HIGH); // Buzzer Pulsando 
     delay(80); // Duração do pulso
     digitalWrite(buzzerPin, LOW);
     
   } else if (distance <= 10 && distance > 0) {
-    // Zona Crítica
+    // Zona Crítica 
     acaoDisparada = "BUZZER_MAXIMO_CONTINUO";
-    digitalWrite(buzzerPin, HIGH); // Buzzer Contínuo
+    digitalWrite(buzzerPin, HIGH); // Buzzer Contínuo [cite: 9]
     
   } else {
     // Fora de alcance ou erro
     acaoDisparada = "ERRO_LEITURA";
+    digitalWrite(buzzerPin, LOW);
+  }
 
+  // --- 5. ARMAZENAR DADOS NA NUVEM (Implementa o Desafio Extra) ---
+  
+  idEpisodio++; // Incrementa o ID do episódio [cite: 35]
+  
+  // Cria o objeto JSON para enviar (conforme seus "Dados a serem Armazenados")
+  FirebaseJson json;
+  json.set("timestamp", ".sv", "timestamp"); // [cite: 24, 28]
+  json.set("distancia_cm", distance);        // [cite: 29, 31]
+  json.set("acao_disparada", acaoDisparada);  // [cite: 32, 34]
+  json.set("id_episodio", (int)idEpisodio);  // [cite: 35, 37]
+
+  // Envia (set) o JSON para um "nó" usando o id_episodio como chave
+  String nodePath = "logs_sensor/" + String(idEpisodio);
+  
+  Serial.println("Enviando dados para o Firebase...");
+  if (Firebase.setJSON(fbdo, nodePath, json)) {
+    Serial.println("DADOS ENVIADOS COM SUCESSO!");
+  } else {
+    Serial.println("ERRO AO ENVIAR DADOS:");
+    Serial.println(fbdo.errorReason());
+  }
+  
+  // Pausa antes da próxima leitura.
+  // Este delay controla o "espaço" entre os pulsos.
+  delay(420); 
+}
