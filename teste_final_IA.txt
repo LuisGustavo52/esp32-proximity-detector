@@ -14,8 +14,8 @@
 #include <FirebaseESP32.h>
 
 // --- 1. CONFIGURAÇÃO (PREENCHA SÓ O WI-FI) ---
-#define WIFI_SSID "NOME_DA_SUA_REDE_WIFI" // <-- PREENCHA AQUI
-#define WIFI_PASSWORD "SUA_SENHA_WIFI"  // <-- PREENCHA AQUI
+#define WIFI_SSID "Luis-Gustavo's-Galaxy-S21-FE" // <-- PREENCHA AQUI
+#define WIFI_PASSWORD "wpvn6161"  // <-- PREENCHA AQUI
 
 // Credenciais do Firebase (JÁ PREENCHIDAS)
 #define FIREBASE_HOST "detector-distanciaesp32-default-rtdb.firebaseio.com" 
@@ -107,3 +107,4 @@ void loop() {
   } else {
     // Fora de alcance ou erro
     acaoDisparada = "ERRO_LEITURA";
+
