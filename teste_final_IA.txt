@@ -1,115 +1,109 @@
+/*
+ * CÓDIGO FINAL - DESAFIO EXTRA (Firebase + Pinos do Amigo)
+ * Hardware: ESP32, Sensor HC-SR04, Buzzer
+ * Ação: Loga dados no Firebase com resposta gradativa do buzzer
+ *
+ * PINAGEM ATUALIZADA (do seu amigo):
+ * - Sensor Trig: D2
+ * - Sensor Echo: D4
+ * - Buzzer (+):  D26
+ */
+
+// Bibliotecas necessárias
 #include <WiFi.h>
-#include <WebServer.h>
+#include <FirebaseESP32.h>
 
-// --- Configure sua Rede ---
-const char* ssid = "TRIO";
-const char* password = "10204080PF";
-// --------------------------
+// --- 1. CONFIGURAÇÃO (PREENCHA SÓ O WI-FI) ---
+#define WIFI_SSID "NOME_DA_SUA_REDE_WIFI" // <-- PREENCHA AQUI
+#define WIFI_PASSWORD "SUA_SENHA_WIFI"  // <-- PREENCHA AQUI
 
-// Pinos do Hardware (baseado no seu circuito)
-const int TRIG_PIN = 5;
-const int ECHO_PIN = 18;
-const int BUZZER_PIN = 23;
-const int LED_PIN = 21; // Pino D21 (o LED que você montou)
+// Credenciais do Firebase (JÁ PREENCHIDAS)
+#define FIREBASE_HOST "detector-distanciaesp32-default-rtdb.firebaseio.com" 
+#define FIREBASE_AUTH "dBfZaKDrBPmDqttQBPhrh3ZQhLjlEENVMn5HJrNP" 
 
-// Cria o servidor na porta 80 (padrão web)
-WebServer server(80);
+// Pinos dos componentes (ATUALIZADOS)
+const int trigPin = 2;
+const int echoPin = 4;
+const int buzzerPin = 26;
 
-// Variável global para guardar a distância
-float distanciaCm = 0;
+// Variáveis para o cálculo
+long duration;
+float distance; // Usar float para mais precisão
+
+// Objetos do Firebase
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+// Variável para armazenar a ação disparada (conforme PDF)
+String acaoDisparada = "INICIALIZANDO";
+unsigned long idEpisodio = 0; // Contador para o ID
 
 void setup() {
-  Serial.begin(115200); // Inicia o monitor serial (para ver o IP)
+  Serial.begin(115200);
   
-  // Define os modos dos pinos
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  pinMode(LED_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW); // Garante que comece desligado
 
-  // --- Conectando ao Wi-Fi ---
-  Serial.print("Conectando a ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-
-  // Espera a conexão
+  // --- 2. CONECTAR AO WI-FI ---
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Conectando ao Wi-Fi");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
     Serial.print(".");
+    delay(300);
   }
+  Serial.println("\nConectado!");
 
-  // Se conectou, imprime o IP
-  Serial.println("\nWiFi conectado!");
-  Serial.print("Servidor iniciado no IP: ");
-  Serial.println(WiFi.localIP());
-
-  // --- Configurando o Servidor Web ---
-  // Define o que acontece quando alguém acessa a página principal ("/")
-  server.on("/", handleRoot);
+  // --- 3. CONECTAR AO FIREBASE ---
+  config.host = FIREBASE_HOST;
+  config.api_key = FIREBASE_AUTH;
   
-  // Inicia o servidor
-  server.begin();
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
 }
 
 void loop() {
-  // 1. Atualiza a leitura da distância
-  lerDistancia();
-  
-  // 2. Controla o alarme local (LED e Buzzer)
-  controlarAlarme();
-  
-  // 3. Permite que o servidor web atenda clientes (seu celular)
-  server.handleClient();
-}
-
-// Função que lê o sensor
-void lerDistancia() {
-  // Dispara o pulso do Trigger
-  digitalWrite(TRIG_PIN, LOW);
+  // 1. Faz a leitura da distância
+  digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
+  digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+  digitalWrite(trigPin, LOW);
   
-  // Lê o tempo de retorno do Echo
-  long duration = pulseIn(ECHO_PIN, HIGH);
-  
-  // Calcula a distância
-  // 34300 cm/s (velocidade do som) / 2 (ida e volta)
-  distanciaCm = duration * 0.034 / 2;
-}
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.0343 / 2; // Percepção D(t)
 
-// Função que controla o alarme
-void controlarAlarme() {
-  // Se o objeto estiver a menos de 20cm (e não for 0)
-  if (distanciaCm > 0 && distanciaCm < 20) {
-    digitalWrite(LED_PIN, HIGH); // Acende o LED
-    tone(BUZZER_PIN, 1500, 100); // Toca um bipe (1500 Hz por 100ms)
+  Serial.print("Distancia: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  // --- 4. LÓGICA R.C.A. (FOCO NO BUZZER GRADATIVO) ---
+  // Baseado na tabela "Regras Condição-Ação" do PDF
+  
+  if (distance > 50) {
+    // Zona Segura
+    acaoDisparada = "BUZZER_OFF_SEGURO";
+    digitalWrite(buzzerPin, LOW); // Buzzer Desligado
+    
+  } else if (distance > 20 && distance <= 50) {
+    // Zona de Atenção
+    acaoDisparada = "BUZZER_OFF_ATENCAO";
+    digitalWrite(buzzerPin, LOW); // Buzzer Desligado
+    
+  } else if (distance > 10 && distance <= 20) {
+    // Zona de Alerta
+    acaoDisparada = "BUZZER_PULSANTE_LENTO";
+    digitalWrite(buzzerPin, HIGH); // Buzzer Pulsando
+    delay(80); // Duração do pulso
+    digitalWrite(buzzerPin, LOW);
+    
+  } else if (distance <= 10 && distance > 0) {
+    // Zona Crítica
+    acaoDisparada = "BUZZER_MAXIMO_CONTINUO";
+    digitalWrite(buzzerPin, HIGH); // Buzzer Contínuo
+    
   } else {
-    digitalWrite(LED_PIN, LOW); // Apaga o LED
-    noTone(BUZZER_PIN); // Desliga o buzzer
-  }
-}
-
-// Função que "constrói" a página da web
-void handleRoot() {
-  String html = "<html><head>";
-  html += "<title>ESP32 - Sensor de Distancia</title>";
-  // Esta linha faz a página recarregar sozinha a cada 2 segundos
-  html += "<meta http-equiv='refresh' content='2'>";
-  html += "<style>";
-  html += "body { font-family: Arial, sans-serif; text-align: center; background-color: #282c34; color: white; }";
-  html += "h1 { color: #61dafb; }";
-  html += "p { font-size: 5rem; font-weight: bold; margin-top: 50px; }";
-  html += ".unidade { font-size: 2rem; }";
-  html += "</style>";
-  html += "</head><body>";
-  html += "<h1>Projeto Sensor de Proximidade</h1>";
-  html += "<p>";
-  html += String(distanciaCm, 1); // Mostra a distância com 1 casa decimal
-  html += "<span class='unidade'> cm</span></p>";
-  html += "</body></html>";
-  
-  // Envia a página pronta para o navegador
-  server.send(200, "text/html", html);
-}
+    // Fora de alcance ou erro
+    acaoDisparada = "ERRO_LEITURA";
